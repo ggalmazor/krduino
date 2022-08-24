@@ -10,34 +10,34 @@ byte R_MOTOR_PWM_PIN = 6;  // 0 - 255
 byte L_MOTOR_PWM_PIN = 5;  // 0 - 255
 byte R_MOTOR_DIR_PIN = 7;  // 0 B, 1 F
 byte L_MOTOR_DIR_PIN = 4;  // 0 B, 1 F
+short MAX_SPEED = 255;
 
 void setup() {
+  Serial.begin(115200);
   pinMode(R_MOTOR_PWM_PIN, OUTPUT);
   pinMode(L_MOTOR_PWM_PIN, OUTPUT);
   pinMode(R_MOTOR_DIR_PIN, OUTPUT);
   pinMode(L_MOTOR_DIR_PIN, OUTPUT);
 
-  // delay(4000);
-
   irmp_init();
 }
 
-short speed = 0;
+short throttle = 0;
 short yaw = 0;
 
 void loop() {
   if (irmp_get_data(&irmp_data)) {
     switch (irmp_data.command) {
       case 0x9F60:  // cursor up
-        speed = min(250, speed + 10);
-        yaw = speed == 0 ? 0 : yaw;
+        throttle = min(10, throttle + 1);
+        yaw = throttle == 0 ? 0 : yaw;
         break;
       case 0x9E61:  // cursor down
-        speed = max(-250, speed - 10);
-        yaw = speed == 0 ? 0 : yaw;
+        throttle = max(-10, throttle - 1);
+        yaw = throttle == 0 ? 0 : yaw;
         break;
       case 0x9768:  // cursor center
-        speed = 0;
+        throttle = 0;
         yaw = 0;
         break;
       case 0x9D62:  // cursor right
@@ -51,20 +51,18 @@ void loop() {
     }
     irmp_get_data(&irmp_data);
   }
-  move(speed, yaw);
+  move(throttle, yaw);
 }
 
-void move(short speed, short yaw) {
-  // Lots of room for improvement here. Bias should take away the percentage
-  // differential to the wheel than needs to rotate less
-  double left_bias = (double(yaw) + 10) / 20;
-  double right_bias = 1 - left_bias;
-  short left_speed = abs(speed) * left_bias;
-  short right_speed = abs(speed) * right_bias;
-  
-  bool direction = speed >= 0;
+void move(short throttle, short yaw) {
+  bool direction = throttle >= 0;
   digitalWrite(R_MOTOR_DIR_PIN, direction);
   digitalWrite(L_MOTOR_DIR_PIN, direction);
+
+  double speed = (double)MAX_SPEED * (double)abs(throttle) / 10;
+  double steering_percentage = (double)abs(yaw) / 10;
+  double right_speed = yaw > 0 ? speed * (1 - steering_percentage) : speed;
+  double left_speed = yaw < 0 ? speed * (1 - steering_percentage) : speed;
   analogWrite(R_MOTOR_PWM_PIN, right_speed);
   analogWrite(L_MOTOR_PWM_PIN, left_speed);
 }
